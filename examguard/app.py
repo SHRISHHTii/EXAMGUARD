@@ -20,6 +20,7 @@ from monitoring.ai_repor_manager import save_ai_report, get_ai_report
 
 import base64
 from monitoring.evidence_manager import save_evidence
+from monitoring.reviewer_manager import get_session_summary
 
 
 app = Flask(__name__)
@@ -211,32 +212,29 @@ def logout():
 # ------------------------------------------------
 # START EXAM
 # ------------------------------------------------
-@app.route("/start-exam")
+@app.route("/start-exam", methods=["POST"])
 def start_exam():
-
     if "candidate_id" not in session:
         return redirect(url_for("login"))
-
-    exam_session_id = str(uuid.uuid4())
-    session["exam_session_id"] = exam_session_id
-
+    candidate_id = session["candidate_id"]
     connection = get_db()
-
     try:
-        connection.execute("""
-            INSERT INTO exam_sessions
-                (candidate_id, session_id, status, started_at)
-            VALUES (?, ?, 'in_progress', ?)
-        """, (
-            session["candidate_id"],
-            exam_session_id,
-            datetime.now().isoformat(),
-        ))
-        connection.commit()
-
+        row = connection.execute("""
+            SELECT session_id FROM exam_sessions
+            WHERE candidate_id = ? AND status IN ('in_progress','paused')
+            ORDER BY started_at DESC LIMIT 1""", (candidate_id,)).fetchone()
+        if row:
+            exam_session_id = row["session_id"]
+        else:
+            exam_session_id = str(uuid.uuid4())
+            connection.execute("""
+                INSERT INTO exam_sessions (candidate_id, session_id, status, started_at)
+                VALUES (?, ?, 'in_progress', ?)""",
+                (candidate_id, exam_session_id, datetime.now().isoformat()))
+            connection.commit()
+        session["exam_session_id"] = exam_session_id
     finally:
         connection.close()
-
     return render_template("exam.html", candidate_name=session.get("candidate_name"))
 
 
@@ -673,6 +671,36 @@ def ai_report(candidate_id, session_id):
         "success": True,
         "report": result
     }
+    
+
+@app.route("/reviewer/session/<int:candidate_id>/<session_id>")
+def reviewer_session(candidate_id, session_id):
+
+    # Require reviewer authentication.
+    # This assumes your reviewer login stores
+    # session["reviewer_id"].
+    if "reviewer_id" not in session:
+        return {
+            "success": False,
+            "message": "Reviewer login required"
+        }, 401
+
+    summary = get_session_summary(
+        candidate_id,
+        session_id
+    )
+
+    if summary is None:
+        return {
+            "success": False,
+            "message": "Session summary not found"
+        }, 404
+
+    return render_template(
+        "reviewer_session.html",
+        summary=summary
+    )
+
 # ------------------------------------------------
 # RUN FLASK
 # ------------------------------------------------
