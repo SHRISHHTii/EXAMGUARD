@@ -1,73 +1,22 @@
 from monitoring.integrity_score import (get_risk_level, calculate_integrity_score, calculate_face_presence_ratio,calculate_event_penalty)
 
-def validate_low_risk_level_session():
-    browser_events=[
-        {"event_type":"tab_switch"},
-        {"event_type":"focus_loss"},
-    ]
-    
-    face_presence_ratio=98
-    
-    penalty = calculate_event_penalty(browser_events, face_presence_ratio)
-    risk = get_risk_level(penalty)
-    
-    print(f"Penalty: {penalty}, Risk Level: {risk}")
-    print("Expected Risk Level: low")
-    print("face prensence ratio:", face_presence_ratio)
-    print("penalty:", penalty)
-    
-def validate_medium_risk_level_session():
-    browser_events=[
-        {"event_type":"tab_switch"},
-        {"event_type":"focus_loss"},
-        {"event_type":"tab_switch"},
-        {"event_type":"tab_switch"},
-        {"event_type":"focus_loss"},
-        {"event_type":"focus_loss"},
-        {"event_type":"copy_paste"},
-        {"event_type":"right_click"},
-    ]
-    
-    face_presence_ratio=98
-    
-    penalty = calculate_event_penalty(browser_events, face_presence_ratio)
-    risk = get_risk_level(penalty)
-    
-    print(f"Penalty: {penalty}, Risk Level: {risk}")
-    print("Expected Risk Level: medium")
-    print("face prensence ratio:", face_presence_ratio)
-    print("penalty:", penalty)
-    
-def validate_high_risk_level_session():
-    browser_events=[
-        {"event_type":"tab_switch"},
-        {"event_type":"tab_switch"},
-        {"event_type":"focus_loss"},
-        {"event_type":"tab_switch"},
-        {"event_type":"tab_switch"},
-        {"event_type":"focus_loss"},
-        {"event_type":"focus_loss"},
-        {"event_type":"copy_paste"},
-        {"event_type":"right_click"},
-        {"event_type":"tab_switch"},
-        {"event_type":"paste_attempt"},
-        {"event_type":"tab_switch"},
-    ]
-    
-    face_presence_ratio=98
-    
-    penalty = calculate_event_penalty(browser_events, face_presence_ratio)
-    risk = get_risk_level(penalty)
-    
-    print(f"Penalty: {penalty}, Risk Level: {risk}")
-    print("Expected Risk Level: high")
-    print("face prensence ratio:", face_presence_ratio)
-    print("penalty:", penalty)
-    
+def _events(**counts):
+    return [{"event_type": n} for n, k in counts.items() for _ in range(k)]
+
+SCENARIOS = [
+    ("low",    _events(tab_switch=1, focus_lost=1, mouse_activity=40), 98, "Low"),
+    ("medium", _events(tab_switch=2, focus_lost=2, right_click=1),     98, "Medium"),
+    ("high",   _events(tab_switch=5, focus_lost=3, copy_attempt=1,
+                       paste_attempt=1, right_click=2),                45, "High"),
+]
+
 def main():
-    validate_low_risk_level_session()
-    validate_medium_risk_level_session()
-    validate_high_risk_level_session()
+    for name, events, face, expected in SCENARIOS:
+        score = calculate_integrity_score(events, face)
+        risk = get_risk_level(score)
+        print(f"{name}: score={score} risk={risk} expected={expected}")
+        assert risk == expected, f"{name} scenario failed"
+    print("All scoring scenarios passed.")
     
 if __name__ == "__main__":
     main()
